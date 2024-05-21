@@ -1,3 +1,6 @@
+# testing week of comp
+#connects to lidar and scans, takes data and converts to point cloud, saves to file, visualizes file
+
 import ouster.client as client
 import numpy as np
 import open3d as o3d
