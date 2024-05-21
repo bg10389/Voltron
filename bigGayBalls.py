@@ -1,6 +1,6 @@
 import numpy as np
 import open3d as o3d
-from ouster import client
+from ouster import client, pcap
 
 def capture_live_data(sensor_hostname: str, lidar_port: int = 7502, imu_port: int = 7503):
     try:
@@ -68,26 +68,39 @@ def process_point_cloud(pcd):
     crash_avoidance(cones)
 
 def crash_avoidance(cones):
-    about_to_crash = 0
-    dont = 0
+    points = np.asarray(cones.points)
+    if len(points) == 0:
+        print("No cones detected.")
+        return
 
-    # Assuming 'cones' is the point cloud of isolated cones
-    distances = cones.compute_point_cloud_distance(cones)
-    min_distance = min(distances) if distances else float('inf')
+    # Separate cones into left and right based on their x-coordinates
+    left_cones = points[points[:, 1] > 0]
+    right_cones = points[points[:, 1] < 0]
 
-    if min_distance < 0.3048:  # 1 ft in meters
-        about_to_crash = 1
-        if about_to_crash > 0:
-            dont = 1
+    if len(left_cones) == 0 or len(right_cones) == 0:
+        print("Not enough cones to determine a path.")
+        return
 
-    # Movement logic
-    assigned = 'left'  # Example assigned direction, modify as needed
-    if dont and assigned == 'left':
+    # Find the closest cone on the left and right
+    closest_left_cone = left_cones[np.argmin(np.linalg.norm(left_cones, axis=1))]
+    closest_right_cone = right_cones[np.argmin(np.linalg.norm(right_cones, axis=1))]
+
+    # Compute the midpoint between the closest left and right cones
+    midpoint = (closest_left_cone + closest_right_cone) / 2
+
+    print(f"Closest left cone: {closest_left_cone}")
+    print(f"Closest right cone: {closest_right_cone}")
+    print(f"Midpoint: {midpoint}")
+
+    # Movement logic: adjust position to aim for the midpoint
+    current_position = np.array([0, 0, 0])  # Assuming current position is the origin
+    direction_vector = midpoint - current_position
+    if direction_vector[1] > 0:
         print("Move right")
-    elif dont and assigned == 'right':
+    elif direction_vector[1] < 0:
         print("Move left")
     else:
-        print("No immediate danger detected.")
+        print("Move forward")
 
 if __name__ == "__main__":
     sensor_hostname = "os-1221234.local"  # Replace with your sensor's hostname or IP address
