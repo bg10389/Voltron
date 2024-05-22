@@ -1,4 +1,5 @@
 import ouster.sdk.client as client
+from ouster.sdk.client import ChanField, XYZLut
 import numpy as np
 import os
 
@@ -12,23 +13,29 @@ def capture_single_frame(sensor_ip: str, lidar_port: int = 7502, imu_port: int =
         metadata = sensor.metadata
         print(f"Metadata: {metadata}")
 
+        # Create an XYZ lookup table
+        xyz_lut = XYZLut(metadata)
+
         # Create a LidarScan stream with increased timeout
         scans = client.Scans(sensor, timeout=10.0)
 
         for scan in scans:
-            # Get the required channel fields
-            xyz_lut = client.XYZLut(metadata)
+            # Extract the XYZ point cloud data
             xyz = xyz_lut(scan)
 
-            # Determine the path to the Downloads folder
-            downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+            # Check if the XYZ data is valid
+            if xyz is not None and xyz.size > 0 and not np.all(xyz == 0):
+                # Determine the path to the Downloads folder
+                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
-            # Save point cloud to a text file in the Downloads folder
-            file_path = os.path.join(downloads_path, "single_frame_point_cloud.txt")
-            np.savetxt(file_path, xyz.reshape(-1, 3), delimiter=" ", header="X Y Z")
-            print(f"Point cloud saved to {file_path}")
+                # Save point cloud to a text file in the Downloads folder
+                file_path = os.path.join(downloads_path, "single_frame_point_cloud.txt")
+                np.savetxt(file_path, xyz.reshape(-1, 3), delimiter=" ", header="X Y Z")
+                print(f"Point cloud saved to {file_path}")
 
-            break  # Process only one scan
+                break  # Process only one scan
+            else:
+                print("Received empty or invalid XYZ data")
 
         # Close the sensor connection
         sensor.close()
