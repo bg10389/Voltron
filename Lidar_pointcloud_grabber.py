@@ -3,7 +3,7 @@ from ouster.sdk.client import ChanField, XYZLut
 import numpy as np
 import os
 
-def capture_and_save_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, num_scans: int = 5):
+def capture_and_save_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, num_scans: int = 1):
     try:
         # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
