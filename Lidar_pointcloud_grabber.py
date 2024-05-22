@@ -1,6 +1,6 @@
 import ouster.sdk.client as client
 import numpy as np
-import open3d as o3d
+import os
 
 def capture_single_frame(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503):
     try:
@@ -19,15 +19,13 @@ def capture_single_frame(sensor_ip: str, lidar_port: int = 7502, imu_port: int =
                 # Convert LidarScan to point cloud
                 xyz = client.destagger(metadata, scan.field(client.ChanField.XYZ))
 
-                # Convert to Open3D format for visualization
-                point_cloud = o3d.geometry.PointCloud()
-                point_cloud.points = o3d.utility.Vector3dVector(xyz.reshape(-1, 3))
+                # Determine the path to the Downloads folder
+                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
-                # Save point cloud to file
-                o3d.io.write_point_cloud("single_frame_point_cloud.pcd", point_cloud)
-
-                # Visualize point cloud
-                o3d.visualization.draw_geometries([point_cloud])
+                # Save point cloud to a text file in the Downloads folder
+                file_path = os.path.join(downloads_path, "single_frame_point_cloud.txt")
+                np.savetxt(file_path, xyz.reshape(-1, 3), delimiter=" ", header="X Y Z")
+                print(f"Point cloud saved to {file_path}")
 
                 break  # Process only one scan
 
