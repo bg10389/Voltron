@@ -4,6 +4,7 @@ import numpy as np
 import open3d as o3d
 import os
 from scipy.spatial import KDTree
+from sklearn.cluster import DBSCAN
 
 def filter_outliers(point_cloud, nb_neighbors=50, std_ratio=5.0):
     cl, ind = point_cloud.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
@@ -28,7 +29,29 @@ def interpolate_points(point_cloud, num_interpolations=1):
     combined_cloud.points = o3d.utility.Vector3dVector(combined_points)
     return combined_cloud
 
-def capture_and_visualize_single_scan(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=20, std_ratio=2.0):
+def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
+    points = np.asarray(point_cloud.points)
+    db = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
+    labels = db.labels_
+    unique_labels = set(labels)
+    clusters = []
+    
+    for k in unique_labels:
+        if k != -1:  # Ignore noise
+            class_member_mask = (labels == k)
+            cluster_points = points[class_member_mask]
+            clusters.append(cluster_points)
+    
+    return clusters
+
+def save_clusters_info(clusters, file_path):
+    with open(file_path, 'w') as f:
+        f.write("ClusterID X Y Z\n")
+        for i, cluster in enumerate(clusters):
+            centroid = np.mean(cluster, axis=0)
+            f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
+
+def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5):
     try:
         # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
@@ -44,7 +67,12 @@ def capture_and_visualize_single_scan(sensor_ip: str, lidar_port: int = 7502, im
         # Create a LidarScan stream with increased timeout
         scans = client.Scans(sensor, timeout=10.0)
 
-        for scan in scans:
+        point_clouds = []
+
+        for i, scan in enumerate(scans):
+            if i >= num_scans:
+                break
+
             # Extract the XYZ point cloud data
             xyz = xyz_lut(scan)
 
@@ -67,20 +95,40 @@ def capture_and_visualize_single_scan(sensor_ip: str, lidar_port: int = 7502, im
                 # Interpolate points to fill in gaps
                 interpolated_cloud = interpolate_points(filtered_cloud)
 
+                # Cluster the point cloud to find objects
+                clusters = cluster_point_cloud(interpolated_cloud, eps, min_samples)
+
                 # Determine the path to the Downloads folder
                 downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
                 # Save filtered and interpolated point cloud to a text file in the Downloads folder
-                file_path = os.path.join(downloads_path, "single_frame_point_cloud.txt")
-                np.savetxt(file_path, np.asarray(interpolated_cloud.points), delimiter=" ", header="X Y Z")
-                print(f"Filtered and interpolated point cloud saved to {file_path}")
+                point_cloud_file_path = os.path.join(downloads_path, f"scan_{i+1}_point_cloud.txt")
+                np.savetxt(point_cloud_file_path, np.asarray(interpolated_cloud.points), delimiter=" ", header="X Y Z")
+                print(f"Filtered and interpolated point cloud saved to {point_cloud_file_path}")
 
-                # Visualize filtered and interpolated point cloud
-                o3d.visualization.draw_geometries([interpolated_cloud])
+                # Save cluster information to a text file in the Downloads folder
+                clusters_info_file_path = os.path.join(downloads_path, f"scan_{i+1}_clusters_info.txt")
+                save_clusters_info(clusters, clusters_info_file_path)
+                print(f"Cluster information saved to {clusters_info_file_path}")
 
-                break  # Process only one scan
+                point_clouds.append(interpolated_cloud)
+
             else:
                 print("Received empty or invalid XYZ data")
+
+        if point_clouds:
+            try:
+                # Initialize the Open3D visualization window
+                vis = o3d.visualization.Visualizer()
+                vis.create_window()
+
+                for pc in point_clouds:
+                    vis.add_geometry(pc)
+
+                vis.run()
+                vis.destroy_window()
+            except Exception as e:
+                print(f"An error occurred during visualization: {e}")
 
         # Close the sensor connection
         sensor.close()
@@ -90,4 +138,4 @@ def capture_and_visualize_single_scan(sensor_ip: str, lidar_port: int = 7502, im
 
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
-    capture_and_visualize_single_scan(sensor_ip)
+    capture_and_visualize_scans(sensor_ip)
