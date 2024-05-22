@@ -6,13 +6,11 @@ import os
 from scipy.spatial import KDTree
 from sklearn.cluster import DBSCAN
 
-# Function to filter outliers from the point cloud using statistical analysis
 def filter_outliers(point_cloud, nb_neighbors=50, std_ratio=5.0):
     cl, ind = point_cloud.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
     filtered_cloud = point_cloud.select_by_index(ind)
     return filtered_cloud
 
-# Function to interpolate points to increase point density in the point cloud
 def interpolate_points(point_cloud, density_factor=1):
     points = np.asarray(point_cloud.points)
     tree = KDTree(points)
@@ -31,7 +29,6 @@ def interpolate_points(point_cloud, density_factor=1):
     combined_cloud.points = o3d.utility.Vector3dVector(combined_points)
     return combined_cloud
 
-# Function to cluster the point cloud using DBSCAN clustering algorithm
 def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
     points = np.asarray(point_cloud.points)
     db = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
@@ -47,7 +44,6 @@ def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
     
     return clusters
 
-# Function to save cluster information to a file
 def save_clusters_info(clusters, file_path):
     with open(file_path, 'w') as f:
         f.write("ClusterID X Y Z\n")
@@ -55,9 +51,15 @@ def save_clusters_info(clusters, file_path):
             centroid = np.mean(cluster, axis=0)
             f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
 
-# Main function to capture and visualize LIDAR scans
-def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=15, density_factor=1, min_distance=0.0, max_distance=100.0):
+def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5, density_factor=1, min_distance=0.0, max_distance=100.0):
     try:
+        # Determine the path to the Downloads folder
+        downloads_path = os.path.join(os.path.expanduser("~"), "Downloads", "lidar_scans")
+
+        # Create the output folder if it doesn't exist
+        if not os.path.exists(downloads_path):
+            os.makedirs(downloads_path)
+
         # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
         print(f"Connected to sensor: {sensor_ip}")
@@ -107,9 +109,6 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
                 # Cluster the point cloud to find objects
                 clusters = cluster_point_cloud(interpolated_cloud, eps, min_samples)
 
-                # Determine the path to the Downloads folder
-                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
-
                 # Save filtered and interpolated point cloud to a text file in the Downloads folder
                 point_cloud_file_path = os.path.join(downloads_path, f"scan_{i+1}_point_cloud.txt")
                 np.savetxt(point_cloud_file_path, np.asarray(interpolated_cloud.points), delimiter=" ", header="X Y Z")
@@ -149,5 +148,5 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
-    # Capture and visualize scans with specified distance range
-    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=6.0)  # Adjust the distance range as needed
+    # Capture and visualize scans with specified distance range and save files to the Downloads folder
+    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=50.0)  # Adjust the distance range as needed
