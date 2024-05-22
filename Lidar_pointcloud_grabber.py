@@ -6,12 +6,14 @@ import os
 from scipy.spatial import KDTree
 from sklearn.cluster import DBSCAN
 
+# Function to filter outliers from the point cloud using statistical analysis
 def filter_outliers(point_cloud, nb_neighbors=50, std_ratio=5.0):
     cl, ind = point_cloud.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
     filtered_cloud = point_cloud.select_by_index(ind)
     return filtered_cloud
 
-def interpolate_points(point_cloud, num_interpolations=1):
+# Function to interpolate points to increase point density in the point cloud
+def interpolate_points(point_cloud, density_factor=1):
     points = np.asarray(point_cloud.points)
     tree = KDTree(points)
     interpolated_points = []
@@ -19,7 +21,7 @@ def interpolate_points(point_cloud, num_interpolations=1):
     for i in range(len(points)):
         distances, indices = tree.query(points[i], k=3)  # Find the 2 closest neighbors
         for j in range(1, len(indices)):
-            for _ in range(num_interpolations):
+            for _ in range(density_factor):
                 interpolated_point = points[i] + (points[indices[j]] - points[i]) * np.random.random()
                 interpolated_points.append(interpolated_point)
     
@@ -29,6 +31,7 @@ def interpolate_points(point_cloud, num_interpolations=1):
     combined_cloud.points = o3d.utility.Vector3dVector(combined_points)
     return combined_cloud
 
+# Function to cluster the point cloud using DBSCAN clustering algorithm
 def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
     points = np.asarray(point_cloud.points)
     db = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
@@ -44,6 +47,7 @@ def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
     
     return clusters
 
+# Function to save cluster information to a file
 def save_clusters_info(clusters, file_path):
     with open(file_path, 'w') as f:
         f.write("ClusterID X Y Z\n")
@@ -51,7 +55,8 @@ def save_clusters_info(clusters, file_path):
             centroid = np.mean(cluster, axis=0)
             f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
 
-def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5):
+# Main function to capture and visualize LIDAR scans
+def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=15, density_factor=1, min_distance=0.0, max_distance=100.0):
     try:
         # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
@@ -61,39 +66,43 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
         metadata = sensor.metadata
         print(f"Metadata: {metadata}")
 
-        # Create an XYZ lookup table
+        # Create an XYZ lookup table for converting raw LIDAR data to XYZ coordinates
         xyz_lut = XYZLut(metadata)
 
-        # Create a LidarScan stream with increased timeout
+        # Create a LidarScan stream with increased timeout to read data from the sensor
         scans = client.Scans(sensor, timeout=10.0)
 
         point_clouds = []
 
+        # Loop through the scans and process each one
         for i, scan in enumerate(scans):
             if i >= num_scans:
                 break
 
-            # Extract the XYZ point cloud data
+            # Extract the XYZ point cloud data from the scan
             xyz = xyz_lut(scan)
 
             # Remove any points that are all zeros
             valid_points = xyz.reshape(-1, 3)
             valid_points = valid_points[~np.all(valid_points == 0, axis=1)]
 
-            # Filter points to include only those in the front 180 degrees
-            front_points = valid_points[valid_points[:, 0] > 0]
+            # Calculate the distance of each point from the origin
+            distances = np.linalg.norm(valid_points, axis=1)
+
+            # Filter points to include only those in the front 180 degrees and within the distance range
+            front_points = valid_points[(valid_points[:, 0] > 0) & (distances >= min_distance) & (distances <= max_distance)]
 
             # Check if the filtered XYZ data is valid
             if front_points.size > 0:
-                # Convert to Open3D format for outlier filtering
+                # Convert the filtered points to Open3D format for further processing
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(front_points)
 
                 # Apply statistical outlier removal filter
                 filtered_cloud = filter_outliers(point_cloud, nb_neighbors, std_ratio)
 
-                # Interpolate points to fill in gaps
-                interpolated_cloud = interpolate_points(filtered_cloud)
+                # Interpolate points to fill in gaps and increase point density
+                interpolated_cloud = interpolate_points(filtered_cloud, density_factor)
 
                 # Cluster the point cloud to find objects
                 clusters = cluster_point_cloud(interpolated_cloud, eps, min_samples)
@@ -116,12 +125,14 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
             else:
                 print("Received empty or invalid XYZ data")
 
+        # Visualize all the collected point clouds together
         if point_clouds:
             try:
                 # Initialize the Open3D visualization window
                 vis = o3d.visualization.Visualizer()
                 vis.create_window()
 
+                # Add each point cloud to the visualization window
                 for pc in point_clouds:
                     vis.add_geometry(pc)
 
@@ -138,4 +149,5 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
-    capture_and_visualize_scans(sensor_ip)
+    # Capture and visualize scans with specified distance range
+    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=6.0)  # Adjust the distance range as needed
