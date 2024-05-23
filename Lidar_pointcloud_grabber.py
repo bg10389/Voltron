@@ -66,7 +66,7 @@ def save_clusters_info(clusters, file_path):
             f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
 
 # Main function to capture and visualize LIDAR scans
-def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=25, density_factor=1, min_distance=0.0, max_distance=100.0, ground_threshold=0.2):
+def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5, density_factor=1, min_distance=0.0, max_distance=100.0, ground_threshold=0.2):
     try:
         # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
@@ -163,5 +163,5 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 # Main execution block
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
-    # Capture and visualize scans with specified distance range and ground threshold
-    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=4.8, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
+    # Capturew and visualize scans with specified distance range and ground threshold
+    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=5.5, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
