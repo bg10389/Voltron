@@ -69,6 +69,7 @@ float Driving::get_steering() {
 // use to adjust steering direction when cone is outside of the desired parameters
 float Driving::set_Steering(){
     //pull in cone data from txt file
+    // cone_distance = read(txt file most recent line)
     //if (cone >1 meter away){
         //steering = -1.0
         //return steering
