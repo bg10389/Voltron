@@ -9,6 +9,8 @@ from sklearn.cluster import DBSCAN  # Import DBSCAN from scikit-learn for cluste
 # Function to filter outliers from the point cloud using statistical analysis
 def filter_outliers(point_cloud, nb_neighbors=100, std_ratio=20.0):
     # Perform statistical outlier removal
+    # `nb_neighbors` specifies the number of nearest neighbors to consider for each point
+    # `std_ratio` specifies the standard deviation ratio threshold for identifying outliers
     cl, ind = point_cloud.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
     # Select the inlier points (those not identified as outliers)
     filtered_cloud = point_cloud.select_by_index(ind)
@@ -53,15 +55,15 @@ def cluster_point_cloud(point_cloud, eps=0.5, min_samples=10):
 
     return clusters  # Return the list of clusters
 
-# Function to create a cylinder from a point cloud cluster
-def create_cylinder_from_cluster(cluster_points, color):
-    centroid = np.mean(cluster_points, axis=0)  # Calculate the centroid of the cluster
-    height = np.max(cluster_points[:, 2]) - np.min(cluster_points[:, 2])  # Calculate the height of the cluster
-    radius = np.mean(np.linalg.norm(cluster_points[:, :2] - centroid[:2], axis=1))  # Estimate the radius
-    mesh = o3d.geometry.TriangleMesh.create_cylinder(radius, height)  # Create a cylinder mesh
-    mesh.translate(centroid)  # Translate the cylinder to the centroid
-    mesh.paint_uniform_color(color)  # Paint the cylinder with the specified color
-    return mesh  # Return the cylinder mesh
+# Function to save cluster information to a text file
+def save_clusters_info(clusters, file_path):
+    with open(file_path, 'w') as f:  # Open the file for writing
+        f.write("ClusterID X Y Z\n")  # Write the header
+        # Loop through each cluster
+        for i, cluster in enumerate(clusters):
+            centroid = np.mean(cluster, axis=0)  # Calculate the centroid of the cluster
+            # Write the cluster ID and centroid coordinates to the file
+            f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
 
 # Main function to capture and visualize LIDAR scans
 def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5, density_factor=1, min_distance=0.0, max_distance=100.0, ground_threshold=0.2):
@@ -118,6 +120,19 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
                 # Cluster the point cloud to find objects
                 clusters = cluster_point_cloud(interpolated_cloud, eps, min_samples)
 
+                # Determine the path to the Downloads folder
+                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+
+                # Save filtered and interpolated point cloud to a text file in the Downloads folder
+                point_cloud_file_path = os.path.join(downloads_path, f"scan_{i+1}_point_cloud.txt")
+                np.savetxt(point_cloud_file_path, np.asarray(interpolated_cloud.points), delimiter=" ", header="X Y Z")
+                print(f"Filtered and interpolated point cloud saved to {point_cloud_file_path}")
+
+                # Save cluster information to a text file in the Downloads folder
+                clusters_info_file_path = os.path.join(downloads_path, f"scan_{i+1}_clusters_info.txt")
+                save_clusters_info(clusters, clusters_info_file_path)
+                print(f"Cluster information saved to {clusters_info_file_path}")
+
                 # Add the processed point cloud to the list
                 point_clouds.append(interpolated_cloud)
 
@@ -131,22 +146,9 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
                 vis = o3d.visualization.Visualizer()
                 vis.create_window()
 
-                # Create a black cylinder at the origin of the lidar
-                lidar_origin_cylinder = o3d.geometry.TriangleMesh.create_cylinder(0.1, 0.5)
-                lidar_origin_cylinder.paint_uniform_color([0, 0, 0])
-                vis.add_geometry(lidar_origin_cylinder)
-
-                # Visualize the clusters as orange cylinders
-                cone_color = [1, 0.549, 0]  # Orange color
-                for i, cluster in enumerate(clusters[:4]):  # Limit to 4 cones
-                    cylinder = create_cylinder_from_cluster(cluster, cone_color)
-                    vis.add_geometry(cylinder)
-
-                # Add measuring reference rings
-                for radius in range(1, 11):  # 1 to 10 meters
-                    ring = o3d.geometry.TriangleMesh.create_torus(radius=radius, tube_radius=0.01)
-                    ring.paint_uniform_color([0.5, 0.5, 0.5])  # Grey color
-                    vis.add_geometry(ring)
+                # Add each point cloud to the visualization window
+                for pc in point_clouds:
+                    vis.add_geometry(pc)
 
                 vis.run()  # Run the visualization
                 vis.destroy_window()  # Destroy the visualization window
@@ -158,9 +160,8 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 
     except Exception as e:
         print(f"An error occurred: {e}")
-
 # Main execution block
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
-    # Capture and visualize scans with specified distance range and ground threshold
-    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=9.8, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
+    # Capturew and visualize scans with specified distance range and ground threshold
+    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=5.5, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
