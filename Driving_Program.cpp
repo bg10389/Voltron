@@ -55,8 +55,8 @@ float Driving::get_throttle() {
 
 //use to adjust throttle while in autonomous. Throttle will always be engaged until deadman is released
 float Driving::set_throttle(){
-    // if get_auto_mux() > -0.5
-        //throttle = 10
+    // if (get_auto_mux() > -0.5){
+        //throttle = 10}
     //return throttle
 }
 
