@@ -55,131 +55,97 @@ def save_clusters_info(clusters, file_path):
             centroid = np.mean(cluster, axis=0)
             f.write(f"{i} {centroid[0]:.3f} {centroid[1]:.3f} {centroid[2]:.3f}\n")
 
-# Function to convert clusters to cones
-def convert_clusters_to_cones(clusters):
-    cones = []
-    for cluster in clusters:
-        if len(cluster) == 0:
-            continue
-        points = np.array(cluster)
-        min_z = np.min(points[:, 2])
-        max_z = np.max(points[:, 2])
-        centroid = np.mean(points, axis=0)
-        radius = np.linalg.norm(points[:, :2] - centroid[:2], axis=1).max()
-        height = max_z - min_z
-
-        # Ignore cones with radius larger than 0.3 meters
-        if radius > 0.3:
-            continue
-
-        cone = o3d.geometry.TriangleMesh.create_cone(radius=radius, height=height)
-        transformation = np.eye(4)
-        transformation[:3, 3] = [centroid[0], centroid[1], min_z]  # Place the cone base at the minimum Z
-        cone.transform(transformation)
-        cone.paint_uniform_color([1, 0, 0])  # Set cone color to red
-        cones.append(cone)
-    return cones
-
-# Function to create a black cylinder at the zero position
-def create_zero_cylinder():
-    radius = 0.1  # Radius of the cylinder
-    height = 1.0  # Height of the cylinder
-    zero_cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=radius, height=height)
-    zero_cylinder.paint_uniform_color([0, 0, 0])  # Set cylinder color to black
-    zero_cylinder.translate([0, 0, height / 2])  # Position the cylinder at the origin
-    return zero_cylinder
-
 # Main function to capture and visualize LIDAR scans
 def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port: int = 7503, nb_neighbors=50, std_ratio=5.0, eps=0.5, min_samples=10, num_scans=5, density_factor=1, min_distance=0.0, max_distance=100.0, ground_threshold=0.2):
     try:
+        # Initialize the sensor with IP address and ports
         sensor = client.Sensor(hostname=sensor_ip, lidar_port=lidar_port, imu_port=imu_port)
         print(f"Connected to sensor: {sensor_ip}")
 
+        # Retrieve sensor metadata
         metadata = sensor.metadata
         print(f"Metadata: {metadata}")
 
+        # Create an XYZ lookup table for converting raw LIDAR data to XYZ coordinates
         xyz_lut = XYZLut(metadata)
 
+        # Create a LidarScan stream with increased timeout to read data from the sensor
         scans = client.Scans(sensor, timeout=10.0)
 
-        point_clouds = []
-        original_points = []
+        point_clouds = []  # List to hold point clouds
 
+        # Loop through the scans and process each one
         for i, scan in enumerate(scans):
-            if i >= num_scans:
+            if i >= num_scans:  # Stop if the desired number of scans is reached
                 break
 
+            # Extract the XYZ point cloud data from the scan
             xyz = xyz_lut(scan)
 
+            # Remove any points that are all zeros
             valid_points = xyz.reshape(-1, 3)
             valid_points = valid_points[~np.all(valid_points == 0, axis=1)]
 
-            valid_points = valid_points[valid_points[:, 2] > ground_threshold]
+            # Remove ground points below the ground threshold
+            valid_points = valid_points[valid_points[:, 0] > ground_threshold]
 
+            # Calculate the distance of each point from the origin
             distances = np.linalg.norm(valid_points, axis=1)
 
+            # Filter points to include only those in the front 180 degrees and within the distance range
             front_points = valid_points[(valid_points[:, 0] > 0) & (distances >= min_distance) & (distances <= max_distance)]
 
+            # Check if the filtered XYZ data is valid
             if front_points.size > 0:
+                # Convert to Open3D format for outlier filtering
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(front_points)
-                original_points.append(point_cloud)
 
+                # Apply statistical outlier removal filter
                 filtered_cloud = filter_outliers(point_cloud, nb_neighbors, std_ratio)
 
+                # Interpolate points to fill in gaps
                 interpolated_cloud = interpolate_points(filtered_cloud, density_factor)
 
+                # Cluster the point cloud to find objects
                 clusters = cluster_point_cloud(interpolated_cloud, eps, min_samples)
 
-                # Convert clusters to cones
-                cones = convert_clusters_to_cones(clusters)
-
-                # Ensure we have at least 4 cones
-                if len(cones) < 4:
-                    print(f"Warning: Only {len(cones)} cones detected. Trying to gather more scans.")
-                    continue
-
+                # Determine the path to the Downloads folder
                 downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
+                # Save filtered and interpolated point cloud to a text file in the Downloads folder
                 point_cloud_file_path = os.path.join(downloads_path, f"scan_{i+1}_point_cloud.txt")
                 np.savetxt(point_cloud_file_path, np.asarray(interpolated_cloud.points), delimiter=" ", header="X Y Z")
                 print(f"Filtered and interpolated point cloud saved to {point_cloud_file_path}")
 
+                # Save cluster information to a text file in the Downloads folder
                 clusters_info_file_path = os.path.join(downloads_path, f"scan_{i+1}_clusters_info.txt")
                 save_clusters_info(clusters, clusters_info_file_path)
                 print(f"Cluster information saved to {clusters_info_file_path}")
 
-                point_clouds.extend(cones)
+                # Add the processed point cloud to the list
+                point_clouds.append(interpolated_cloud)
 
             else:
                 print("Received empty or invalid XYZ data")
 
-        if len(point_clouds) >= 4:
+        # Check if there are any point clouds to visualize
+        if point_clouds:
             try:
+                # Initialize the Open3D visualization window
                 vis = o3d.visualization.Visualizer()
                 vis.create_window()
 
-                # Add original points to the visualization window
-                for pc in original_points:
-                    pc.paint_uniform_color([1, 0.6, 0])  # Set point cloud color to orange
+                # Add each point cloud to the visualization window
+                for pc in point_clouds:
                     vis.add_geometry(pc)
 
-                # Add cones to the visualization window
-                for cone in point_clouds:
-                    vis.add_geometry(cone)
-
-                # Add the zero position cylinder to the visualization window
-                zero_cylinder = create_zero_cylinder()
-                vis.add_geometry(zero_cylinder)
-
-                vis.run()
-                vis.destroy_window()
+                vis.run()  # Run the visualization
+                vis.destroy_window()  # Destroy the visualization window
             except Exception as e:
                 print(f"An error occurred during visualization: {e}")
 
-        else:
-            print("Insufficient number of cones detected. Please ensure there are at least 4 cones in view.")
-
+        # Close the sensor connection
         sensor.close()
 
     except Exception as e:
@@ -188,4 +154,5 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 # Main execution block
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
+    # Capture and visualize scans with specified distance range and ground threshold
     capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=5.5, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
