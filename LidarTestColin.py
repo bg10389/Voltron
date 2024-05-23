@@ -166,4 +166,4 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
     # Capturew and visualize scans with specified distance range and ground threshold
-    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=5.5, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
+    capture_and_visualize_scans(sensor_ip, min_distance=0.4, max_distance=5.5, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
