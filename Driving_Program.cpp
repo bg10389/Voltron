@@ -57,6 +57,7 @@ float Driving::get_throttle() {
 float Driving::set_throttle(){
     // if get_auto_mux() > -0.5
         //throttle = 10
+    //return throttle
 }
 
 
@@ -70,10 +71,13 @@ float Driving::set_Steering(){
     //pull in cone data from txt file
     //if (cone >1 meter away){
         //steering = -1.0
+        //return steering
     //if cone <1 meter away
         //steering = -1.0
+        //return steering
     //else {
         //steering = 0.0
+        //return steering
     //}
     //}
 }
