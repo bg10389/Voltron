@@ -7,10 +7,12 @@ from scipy.spatial import KDTree  # Import KDTree from SciPy for nearest neighbo
 from sklearn.cluster import DBSCAN  # Import DBSCAN from scikit-learn for clustering
 
 # Function to filter outliers from the point cloud using statistical analysis
-def filter_outliers(point_cloud, nb_neighbors=50, std_ratio=5.0):
+def filter_outliers(point_cloud, nb_neighbors=100, std_ratio=20.0):
     # Perform statistical outlier removal
+    # `nb_neighbors` specifies the number of nearest neighbors to consider for each point
+    # `std_ratio` specifies the standard deviation ratio threshold for identifying outliers
     cl, ind = point_cloud.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
-    # Select the inlier points
+    # Select the inlier points (those not identified as outliers)
     filtered_cloud = point_cloud.select_by_index(ind)
     return filtered_cloud  # Return the filtered point cloud
 
@@ -95,7 +97,7 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
             valid_points = valid_points[~np.all(valid_points == 0, axis=1)]
 
             # Remove ground points below the ground threshold
-            valid_points = valid_points[valid_points[:, 2] > ground_threshold]
+            valid_points = valid_points[valid_points[:, 0] > ground_threshold]
 
             # Calculate the distance of each point from the origin
             distances = np.linalg.norm(valid_points, axis=1)
@@ -158,9 +160,8 @@ def capture_and_visualize_scans(sensor_ip: str, lidar_port: int = 7502, imu_port
 
     except Exception as e:
         print(f"An error occurred: {e}")
-
 # Main execution block
 if __name__ == "__main__":
     sensor_ip = "192.168.3.4"  # Replace with your sensor's static IP address
     # Capture and visualize scans with specified distance range and ground threshold
-    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=4.8, ground_threshold=0.02)  # Adjust the distance range and ground threshold as needed
+    capture_and_visualize_scans(sensor_ip, min_distance=0.0, max_distance=4.8, ground_threshold=0.2)  # Adjust the distance range and ground threshold as needed
